@@ -1,0 +1,26 @@
+name: Start SSM port forwarding
+description: Open a port to the target host via SSM to a bastion
+
+inputs:
+  DB_HOST:
+    required: true
+    description: Database hostname/address
+  DB_PORT:
+    required: true
+    description: Database port
+
+runs:
+  using: "composite"
+  steps:
+    - name: Start port forwarding
+      shell: bash
+      run: |
+        BASTION_INSTANCE_ID=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=ssmbastion-nonprod-ec2" \
+          "Name=instance-state-name,Values=running" \
+          --query "Reservations[0].Instances[0].InstanceId" \
+          --output text)
+        
+        aws ssm start-session --target "$BASTION_INSTANCE_ID" \
+          --document-name AWS-StartPortForwardingSessionToRemoteHost \
+          --parameters '{"portNumber":["${{ inputs.DB_PORT }}"],"localPortNumber":["${{ inputs.DB_PORT }}"],"host":["${{ inputs.DB_HOST }}"]}' &

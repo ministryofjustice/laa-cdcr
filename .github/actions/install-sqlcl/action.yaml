@@ -1,0 +1,29 @@
+name: Install SQLcl
+description: Installs SQLcl
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install SQLcl
+      shell: bash
+      run: |
+        # Install Java
+        echo "Install Java"
+        sudo apt update -qq -o=Dpkg::Use-Pty=0
+        sudo apt install -qq -o=Dpkg::Use-Pty=0 default-jre
+        echo "Check Java version..."
+        java -version
+        echo "Check JAVA_HOME is set..."
+        echo $JAVA_HOME
+
+        # Install SQLcl
+        echo "Download SQLcl"
+        cd /tmp
+        wget --no-verbose https://download.oracle.com/otn_software/java/sqldeveloper/sqlcl-24.3.2.330.1718.zip
+        echo "SQLcl download complete!"
+        echo "Unzip SQLcl..."
+        cd ~
+        unzip -oq /tmp/sqlcl-24.3.2.330.1718.zip
+        echo "Unzip Complete!"
+        echo "Create sql alias for SQLcl"
+        alias sql="${HOME}/sqlcl/bin/sql"

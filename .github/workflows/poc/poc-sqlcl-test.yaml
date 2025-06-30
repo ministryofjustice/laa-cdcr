@@ -1,0 +1,80 @@
+name: Test SQLcl on Oracle DB
+
+on:
+  workflow_dispatch: # Manual trigger only
+
+jobs:
+  execute-sql:
+    runs-on: ubuntu-latest
+    environment: poc
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4.0.2
+      with:
+        role-to-assume: ${{ vars.AWS_ROLE }}
+        role-session-name: "cdc-replacement-gha-${{ github.run_number }}"
+        aws-region: eu-west-2
+
+    - name: Start Port Forwarding
+      run: |
+        BASTION_INSTANCE_ID=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=bastion_linux" \
+          "Name=instance-state-name,Values=running" \
+          --query "Reservations[0].Instances[0].InstanceId" \
+          --output text)
+        
+        aws ssm start-session --target "$BASTION_INSTANCE_ID" \
+          --document-name AWS-StartPortForwardingSessionToRemoteHost \
+          --parameters '{"portNumber":["${{ vars.DB_PORT }}"],"localPortNumber":["${{ vars.DB_PORT }}"],"host":["${{ vars.DB_HOST }}"]}' &
+        sleep 5
+
+        # Test the port forwarding
+        echo "Checking forwarded port 127.0.0.1:${{ vars.DB_PORT }}"
+        nc -zv 127.0.0.1 ${{ vars.DB_PORT }}
+
+    - name: Install SQLcl 
+      run: |
+        # Install Java
+        echo "Install Java"
+        sudo apt install -qq -o=Dpkg::Use-Pty=0 default-jre
+        echo "Check Java version..."
+        java -version
+        echo "Check JAVA_HOME is set..."
+        echo $JAVA_HOME
+
+        # Install SQLcl
+        echo "Download SQLcl"
+        cd /tmp
+        wget --no-verbose https://download.oracle.com/otn_software/java/sqldeveloper/sqlcl-24.3.2.330.1718.zip
+        echo "SQLcl download complete!"
+        echo "Unzip SQLcl..."
+        cd ~
+        unzip -oq /tmp/sqlcl-24.3.2.330.1718.zip
+        echo "Unzip Complete!"
+        echo "Create sql alias for SQLcl"
+        alias sql="${HOME}/sqlcl/bin/sql"
+
+    - name: Execute SQL
+      run: |
+        export JAVA_TOOL_OPTIONS="-Doracle.jdbc.timezoneAsRegion=false"
+        
+        # Run SQL step 1 - Create CDCR User
+        ~/sqlcl/bin/sql \
+        ${{ secrets.BUILD_USER }}/${{ secrets.BUILD_PASSWORD }}@localhost:${{ vars.DB_PORT }}:${{ vars.DB_SID }} \
+        @${{ github.workspace }}/poc/database/users/create_cdcr_user.sql
+
+        # Run SQL step 2 - Create CDCR Dropper Package
+        ~/sqlcl/bin/sql \
+        ${{ secrets.CDCR_USER }}/${{ secrets.CDCR_PASSWORD }}@localhost:${{ vars.DB_PORT }}:${{ vars.DB_SID }} \
+        @${{ github.workspace }}/poc/database/packages/cdcr_dropper.pks
+
+        ~/sqlcl/bin/sql \
+        ${{ secrets.CDCR_USER }}/${{ secrets.CDCR_PASSWORD }}@localhost:${{ vars.DB_PORT }}:${{ vars.DB_SID }} \
+        @${{ github.workspace }}/poc/database/packages/cdcr_dropper.pkb

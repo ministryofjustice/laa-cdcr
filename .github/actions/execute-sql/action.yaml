@@ -1,0 +1,40 @@
+name: Execute SQL
+description: Executes a SQL script
+
+inputs:
+  DB_HOST:
+    required: true
+    description: Database hostname/address
+    default: localhost
+  DB_PORT:
+    required: true
+    description: Database port
+  DB_SID:
+    required: true
+    description: Database SID
+  DB_USERNAME:
+    required: true
+    description: Database user name
+  DB_PASSWORD:
+    required: true
+    description: Database password
+  DB_PRIVILEGES:
+    required: false
+    description: Database special privileges (SYSDBA, SYSOPER, etc.)
+  SQL_FILE:
+    required: true
+    description: Path to file
+  SCRIPT_PARAMETERS:
+    required: false
+    description: Parameters for SQL script
+
+runs:
+  using: "composite"
+  steps:
+    - name: Execute SQL
+      shell: bash
+      run: |
+        export JAVA_TOOL_OPTIONS="-Doracle.jdbc.timezoneAsRegion=false"
+        ~/sqlcl/bin/sql \
+        ${{ inputs.DB_USERNAME }}/${{ inputs.DB_PASSWORD }}@${{ inputs.DB_HOST }}:${{ inputs.DB_PORT }}:${{ inputs.DB_SID }} \
+        ${{ inputs.DB_PRIVILEGES }} @${{ inputs.SQL_FILE }} ${{ inputs.SCRIPT_PARAMETERS }}

@@ -1,0 +1,57 @@
+name: MVL PoC 1 - Create CDCR 
+
+on:
+  workflow_dispatch: # Manual trigger only
+
+jobs:
+  execute-sql:
+    runs-on: ubuntu-latest
+    environment: poc
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+
+    # Setup steps
+
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4.0.2
+      with:
+        role-to-assume: ${{ vars.AWS_ROLE }}
+        role-session-name: "cdc-replacement-gha-${{ github.run_number }}"
+        aws-region: eu-west-2
+
+    - name: Start Port Forwarding
+      uses: ./.github/actions/ssm-port-forwarding
+      with:
+        DB_HOST: ${{ vars.DB_HOST }}
+        DB_PORT: ${{ vars.DB_PORT }}
+
+    - name: Install SQLcl 
+      uses: ./.github/actions/install-sqlcl
+
+    # deployment steps
+    
+    - name: 1 - Create CDCR User
+      uses: ./.github/actions/execute-sql
+      with:
+        DB_USERNAME: ${{ secrets.BUILD_USER }}
+        DB_PASSWORD: ${{ secrets.BUILD_PASSWORD }}
+        DB_PORT: ${{ vars.DB_PORT }}
+        DB_SID: ${{ vars.DB_SID }}
+        SQL_FILE: ${{ github.workspace }}/poc/database/users/create_cdcr_user.sql
+        SCRIPT_PARAMETERS: ${{ secrets.CDCR_PASSWORD }}
+
+    - name: 2 - Create CDCR Dropper Package
+      uses: ./.github/actions/execute-sql
+      with:
+        DB_USERNAME: ${{ secrets.CDCR_USER }}
+        DB_PASSWORD: ${{ secrets.CDCR_PASSWORD }}
+        DB_PORT: ${{ vars.DB_PORT }}
+        DB_SID: ${{ vars.DB_SID }}
+        SQL_FILE: ${{ github.workspace }}/poc/database/scripts/cdcr_deploy_dropper.sql
+

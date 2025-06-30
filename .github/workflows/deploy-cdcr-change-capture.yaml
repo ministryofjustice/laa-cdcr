@@ -1,0 +1,110 @@
+name: Deploy CDC-R Change Capture
+
+# Trigger the workflow manually with a dropdown to choose the environment
+on:
+  workflow_dispatch: # Manual trigger only
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: environment
+
+jobs:
+  execute-sql:
+    name: Deploy CDC-R to ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment}}
+
+    # Permissions needed to use GitHub OIDC and read the repo
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+
+    # Setup steps
+    # Check out CDC-R repository
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # Assume the AWS role in shared-services using GitHub OIDC
+    # This gives the workflow permission to assume deployment roles in other accounts
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4.0.2
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE }}
+        role-session-name: cdc-replacement-gha-${{ github.run_number }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+
+    - name: Start Port Forwarding
+      uses: ./.github/actions/ssm-port-forwarding
+      with:
+        DB_HOST: ${{ secrets.DB_HOST }}
+        DB_PORT: ${{ secrets.DB_PORT }}
+
+    - name: Install SQLcl 
+      uses: ./.github/actions/install-sqlcl
+
+    # Deployment steps
+    
+    - name: 1 - CDC-R platform
+      uses: ./.github/actions/execute-sql
+      with:
+        DB_USERNAME: ${{ vars.BUILD_USER }}
+        DB_PASSWORD: ${{ secrets.BUILD_PASSWORD }}
+        DB_PORT: ${{ secrets.DB_PORT }}
+        DB_SID: ${{ vars.DB_SID }}
+        DB_PRIVILEGES: ${{ vars.DB_PRIVILEGES }}
+        SQL_FILE: ${{ github.workspace }}/cdcr/database/scripts/deploy_cdcr_platform.sql
+        SCRIPT_PARAMETERS: ${{ secrets.CDCR_PASSWORD }}
+
+    - name: 2 - CDC-R Change Capture
+      uses: ./.github/actions/execute-sql
+      with:
+          DB_USERNAME: ${{ vars.CDCR_USER }}
+          DB_PASSWORD: ${{ secrets.CDCR_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_SID: ${{ vars.DB_SID }}
+          SQL_FILE: ${{ github.workspace }}/cdcr/database/scripts/deploy_cdcr_change_capture.sql
+
+    - name: 3 - CDC-R DDL Handler
+      uses: ./.github/actions/execute-sql
+      with:
+          DB_USERNAME: ${{ vars.CDCR_USER }}
+          DB_PASSWORD: ${{ secrets.CDCR_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_SID: ${{ vars.DB_SID }}
+          SQL_FILE: ${{ github.workspace }}/cdcr/database/scripts/deploy_cdcr_ddl_handler.sql
+
+    - name: 4 - Seed CDC-R data for CWA
+      uses: ./.github/actions/execute-sql
+      with:
+          DB_USERNAME: ${{ vars.CDCR_USER }}
+          DB_PASSWORD: ${{ secrets.CDCR_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_SID: ${{ vars.DB_SID }}
+          SQL_FILE: ${{ github.workspace }}/cdcr/database/scripts/seed_cdcr_cwa_data.sql
+      
+    - name: 5 - Configure CDC-R for CWA
+      uses: ./.github/actions/execute-sql
+      with:
+          DB_USERNAME: ${{ vars.CDCR_USER }}
+          DB_PASSWORD: ${{ secrets.CDCR_PASSWORD }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_SID: ${{ vars.DB_SID }}
+          SQL_FILE: ${{ github.workspace }}/cdcr/database/scripts/configure_cdcr_cwa.sql
+
+    # Testing objects. To be removed for production deployment.
+    
+    - name: 6 - CDC-R Test Space
+      uses: ./.github/actions/execute-sql
+      with:
+        DB_USERNAME: ${{ vars.BUILD_USER }}
+        DB_PASSWORD: ${{ secrets.BUILD_PASSWORD }}
+        DB_PORT: ${{ secrets.DB_PORT }}
+        DB_SID: ${{ vars.DB_SID }}
+        SQL_FILE: ${{ github.workspace }}/cdcr/database/scripts/deploy_cdcr_test_space.sql
+        SCRIPT_PARAMETERS: ${{ secrets.CDCR_TEST_PASSWORD }}         
+ 
