@@ -1,4 +1,4 @@
-name: Test DB link creation
+name: Test DB Connection
 
 # Trigger the workflow manually with a dropdown to choose the environment
 on:
