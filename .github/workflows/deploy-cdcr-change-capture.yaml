@@ -31,7 +31,7 @@ jobs:
     # Assume the AWS role in shared-services using GitHub OIDC
     # This gives the workflow permission to assume deployment roles in other accounts
     - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4.0.2
+      uses: aws-actions/configure-aws-credentials@v4.3.1
       with:
         role-to-assume: ${{ secrets.AWS_ROLE }}
         role-session-name: cdc-replacement-gha-${{ github.run_number }}
