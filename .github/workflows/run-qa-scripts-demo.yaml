@@ -26,7 +26,7 @@ jobs:
     # Setup steps
     # Check out CDC-R repository
     - name: Checkout Repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     # Assume the AWS role in shared-services using GitHub OIDC
     # This gives the workflow permission to assume deployment roles in other accounts
